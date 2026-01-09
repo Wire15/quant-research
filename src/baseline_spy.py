@@ -1,7 +1,6 @@
 from pathlib import Path
 import pandas as pd
-import yfinance as yf   
-from matplotlib import pyplot as plt
+from utils import download_data, data_quality, plot_equity
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -11,35 +10,20 @@ FIG_DIR = ROOT / 'figures'
 DATA_DIR.mkdir(exist_ok=True)
 FIG_DIR.mkdir(exist_ok=True)
 
-# Function for pulling prices
-def download_prices(tickers, startDate):
-    df = yf.download(tickers=tickers, start=startDate, progress=False, group_by='column', auto_adjust=True)
-    df.index = pd.to_datetime(df.index)
-    df = df.sort_index()
-    close = df.xs('Close', axis=1, level=0)
-    returns = close.pct_change()
-
-    #print (close.head())
-    #print (close.isna().mean().sort_values(ascending=False).head())
-    equity = (1 + returns).cumprod()
-    return close, returns, equity
-
-# Function for plotting equity curves
-def plot_equity(equity, title, ylabel, filename):
-    ax = equity.plot(figsize=(10, 6))
-    ax.set_title(title)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel('Date')
-    ax.legend(title='Ticker')
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / filename, dpi=300)
-
 if __name__ == "__main__":
-    tickers = ['SPY']
-    startDate = '2010-01-01'
-    close, returns, equity = download_prices(tickers, startDate)
+    tickers = DATA_DIR / 'universe.csv'
+    tickers = pd.read_csv(tickers)['ticker'].tolist()
+    startDate = '2013-01-01'
+    close, returns = download_data(tickers, startDate)
+    report = data_quality(close)
+
+    # Remove tickers with more than 5% missing data
+    close = close.drop(columns=report['tickers_to_remove'])
+    returns = returns[close.columns]
+
     # Save data to CSV files
-    close.to_csv(DATA_DIR / 'spy_close_prices.csv')
-    returns.to_csv(DATA_DIR / 'spy_returns.csv')
+    close.to_csv(DATA_DIR / f'universe_close_prices_{startDate}.csv')
+    returns.to_csv(DATA_DIR / f'universe_returns_{startDate}.csv')
+
     # Plot equity curves & save figures
-    plot_equity(equity, 'Cumulative Returns of SPY since 2010-01-01', 'Cumulative Return', 'cumulative_returns_spy.png')
+    # plot_equity(equity, 'Cumulative Returns of SPY, QQQ, and IWM since 2010-01-01', 'Cumulative Return', 'cumulative_returns_spy_qqq_iwm.png')
